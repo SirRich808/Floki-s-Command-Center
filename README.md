@@ -65,6 +65,28 @@ The router never sees LLM context — the three envelope rules are pure code.
 Set `DAILY_ROOM_URL` to a pre-created room. The dashboard renders it as
 "Enter War Room". Auto-room creation via API is left for a later iteration.
 
+## Phase 1 — the agent council
+
+Bootstrap all five tmux sessions (each pre-loaded with its memory brief):
+
+```bash
+./scripts/start_sessions.sh
+tmux ls | grep floki-
+```
+
+Inside any session — including Floki's and every specialist's — the `floki`
+CLI is the shared tool for querying shared state:
+
+```bash
+floki queue                       # pending + completion counts
+floki hive --agent ops --limit 5  # what Ops has done lately
+floki memory --agent comms        # what Comms knows right now
+floki brief content               # regenerate Content's boot brief
+```
+
+Triage prompt template lives at `config/prompts/floki.md` (paste into your
+OpenClaw config); worker template at `config/prompts/worker.md`.
+
 ## Phase 1 — agent adapters (Elephant-Agent protocol)
 
 Every sub-agent runs in its own tmux session (`floki-comms`, `floki-ops`, …).

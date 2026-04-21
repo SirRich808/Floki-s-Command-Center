@@ -14,5 +14,6 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 logs/
+runtime/
 
 .DS_Store
