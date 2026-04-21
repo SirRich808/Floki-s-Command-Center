@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from floki.config import agents_config
@@ -15,13 +16,26 @@ class AgentSpec:
     terminal_session: str
 
 
+@dataclass(frozen=True)
+class LogicRule:
+    pattern: re.Pattern[str]
+    target: str
+    reason: str
+
+
 class AgentRegistry:
     """Routing metadata loaded from config/agents.yaml.
 
     Consumed by:
       - Telegram handlers (prefix routing)
-      - Pipecat (Phase 5 — same prefix_triggers feed the voice router)
-      - Task auto-assigner (Phase 4)
+      - Pipecat voice WS (Phase 5 — same rules drive the voice router)
+      - Task auto-assigner (Phase 4 dashboard)
+
+    Rule order (all outside the LLM context):
+      1. Keyword   — broadcast words → floki
+      2. Prefix    — "Comms, ..." → comms
+      3. Logic     — regex rules from YAML (pinned/JSON-driven routes)
+      4. Default   — floki triage
     """
 
     def __init__(self) -> None:
@@ -40,17 +54,20 @@ class AgentRegistry:
         self.broadcast_keywords: tuple[str, ...] = tuple(
             k.lower() for k in cfg.get("broadcast_keywords", [])
         )
+        self.logic_rules: tuple[LogicRule, ...] = tuple(
+            LogicRule(
+                pattern=re.compile(r["pattern"]),
+                target=r["target"],
+                reason=r.get("reason", f"logic:{r['target']}"),
+            )
+            for r in cfg.get("logic_rules", [])
+        )
         self.default_agent = "floki"
 
     def route(self, text: str) -> tuple[str, str]:
-        """Apply the same rule order Pipecat will use in Phase 5:
-           1. Keyword (broadcast)
-           2. Prefix (explicit agent invocation)
-           3. Default (floki triage)
-
-        Returns (agent_name, routing_reason).
-        """
-        lowered = text.strip().lower()
+        """Returns (agent_name, routing_reason)."""
+        stripped = text.strip()
+        lowered = stripped.lower()
 
         for kw in self.broadcast_keywords:
             if kw in lowered:
@@ -60,6 +77,10 @@ class AgentRegistry:
         for agent in self.agents.values():
             if first_token in agent.prefix_triggers:
                 return (agent.name, f"prefix:{first_token}")
+
+        for rule in self.logic_rules:
+            if rule.pattern.search(stripped) and rule.target in self.agents:
+                return (rule.target, rule.reason)
 
         return (self.default_agent, "default")
 

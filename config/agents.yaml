@@ -40,3 +40,20 @@ agents:
 
 # Keyword broadcast rules (Phase 5 Pipecat will consume these too)
 broadcast_keywords: ["everyone", "team", "status update", "all hands"]
+
+# Logic rules: regex patterns that route AFTER keyword and prefix but BEFORE
+# falling through to the default (floki). Order matters — first match wins.
+# The Gemini "washing machine" in Phase 3 can append to this file dynamically.
+logic_rules:
+  - pattern: '(?i)\b(expense|invoice|receipt|budget|\$\d)'
+    target: ops
+    reason: logic:finance
+  - pattern: '(?i)\b(thumbnail|caption|script|video|render)'
+    target: content
+    reason: logic:creative
+  - pattern: '(?i)\b(research|cite|source|paper|whitepaper)'
+    target: research
+    reason: logic:research
+  - pattern: '(?i)\b(draft|reply|message|dm|email)'
+    target: comms
+    reason: logic:comms

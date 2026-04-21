@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     dispatch_poll_interval: float = Field(default=0.25, alias="DISPATCH_POLL_INTERVAL")
     dispatch_max_retries: int = Field(default=3, alias="DISPATCH_MAX_RETRIES")
 
+    dashboard_host: str = Field(default="127.0.0.1", alias="DASHBOARD_HOST")
+    dashboard_port: int = Field(default=8787, alias="DASHBOARD_PORT")
+    pipecat_ws_secret: str = Field(default="", alias="PIPECAT_WS_SECRET")
+    daily_room_url: str = Field(default="", alias="DAILY_ROOM_URL")
+
     @field_validator("allowed_chat_ids", mode="before")
     @classmethod
     def _split_ids(cls, v: object) -> list[int]:

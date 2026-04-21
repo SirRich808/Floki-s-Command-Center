@@ -24,10 +24,45 @@ floki-command-center/
 │   ├── queue/        # Waiting Room: schema, store, dispatcher
 │   ├── telegram/     # aiogram bot, allowlist middleware, PIN gate, /hive, /status
 │   ├── agents/       # Sub-agent registry + AgentAdapter (Tmux / Stub)
+│   ├── dashboard/    # FastAPI Mission Control + Pipecat WS (Phase 5)
 │   ├── hive/         # HiveMind query API (Phase 4 surface)
 │   └── security/     # PIN hashing/verification
-└── tests/            # queue, routing, adapters, hive
+└── tests/            # queue, routing, adapters, hive, dashboard
 ```
+
+## Phase 5 — The War Room
+
+`scripts/run_dashboard.py` serves Mission Control at `http://127.0.0.1:8787`.
+Expose via Cloudflare Tunnel and paste the URL into `.env` as `DASHBOARD_TUNNEL_URL`
+— Telegram's `/dashboard` returns it.
+
+**Routing rules** (shared between Telegram, dashboard, and Pipecat):
+
+1. Keyword — broadcast words (`everyone`, `team`, …) → floki
+2. Prefix  — `Comms, ...` → comms
+3. Logic   — regex rules in `agents.yaml::logic_rules` → classified agent
+4. Default — floki triage
+
+**Pipecat integration**
+
+Pipecat runs anywhere on the Mac and connects to the router via either:
+
+```
+# WebSocket (streaming voice loop)
+ws://127.0.0.1:8787/ws/pipecat?key=$PIPECAT_WS_SECRET
+>>> {"transcript": "Ops: log expense $42", "enqueue": true}
+<<< {"agent":"ops","routing_reason":"prefix:ops","envelope_id":17}
+
+# or one-shot HTTP (easier for per-utterance classification)
+POST /api/voice/route?key=$PIPECAT_WS_SECRET
+```
+
+The router never sees LLM context — the three envelope rules are pure code.
+
+**Daily.co**
+
+Set `DAILY_ROOM_URL` to a pre-created room. The dashboard renders it as
+"Enter War Room". Auto-room creation via API is left for a later iteration.
 
 ## Phase 1 — agent adapters (Elephant-Agent protocol)
 
@@ -62,6 +97,9 @@ python scripts/run_telegram.py
 
 # Terminal B (start tmux sessions floki-comms/content/ops/research first, or use FLOKI_ADAPTER=stub):
 python scripts/run_dispatcher.py
+
+# Terminal C — Mission Control:
+python scripts/run_dashboard.py    # → http://127.0.0.1:8787
 ```
 
 Collision prevention: exactly one message leaves the Waiting Room at a time, gated by an
