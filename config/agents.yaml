@@ -1,0 +1,42 @@
+# Sub-agent registry. Adding a new agent (the "Elephant Agent" protocol) = add an entry here.
+# The dispatcher uses `name` as the routing key. Prefix triggers let Pipecat / Telegram route
+# "Comms, draft this..." directly to comms without LLM involvement.
+
+agents:
+  - name: floki
+    role: triage
+    description: Main manager. Evaluates tasks and delegates. Default target when no prefix matches.
+    prefix_triggers: ["floki"]
+    obsidian_vault: null
+    terminal_session: floki-main
+
+  - name: comms
+    role: worker
+    description: Drafts messages, emails, DMs, social replies.
+    prefix_triggers: ["comms", "comm"]
+    obsidian_vault: Communications
+    terminal_session: floki-comms
+
+  - name: content
+    role: worker
+    description: Thumbnails, scripts, captions, creative production.
+    prefix_triggers: ["content"]
+    obsidian_vault: Content
+    terminal_session: floki-content
+
+  - name: ops
+    role: worker
+    description: Finance, expenses, scheduling, logistics.
+    prefix_triggers: ["ops", "operations"]
+    obsidian_vault: Finance
+    terminal_session: floki-ops
+
+  - name: research
+    role: worker
+    description: Deep research, citations, summarization.
+    prefix_triggers: ["research", "researcher"]
+    obsidian_vault: Research
+    terminal_session: floki-research
+
+# Keyword broadcast rules (Phase 5 Pipecat will consume these too)
+broadcast_keywords: ["everyone", "team", "status update", "all hands"]
