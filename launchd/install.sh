@@ -9,7 +9,7 @@ DEST="$HOME/Library/LaunchAgents"
 
 mkdir -p "$DEST" "$PROJECT_PATH/logs"
 
-for plist in com.floki.telegram.plist com.floki.dispatcher.plist com.floki.dashboard.plist; do
+for plist in com.floki.telegram.plist com.floki.dispatcher.plist com.floki.dashboard.plist com.floki.washer.plist; do
   sed "s|__PROJECT_PATH__|$PROJECT_PATH|g; s|__PYTHON__|$PYTHON|g" \
     "$PROJECT_PATH/launchd/$plist" > "$DEST/$plist"
   launchctl unload "$DEST/$plist" 2>/dev/null || true

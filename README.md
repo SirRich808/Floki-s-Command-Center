@@ -25,6 +25,7 @@ floki-command-center/
 │   ├── telegram/     # aiogram bot, allowlist middleware, PIN gate, /hive, /status
 │   ├── agents/       # Sub-agent registry + AgentAdapter (Tmux / Stub)
 │   ├── dashboard/    # FastAPI Mission Control + Pipecat WS (Phase 5)
+│   ├── memory/       # Washing Machine: store, Washer ABC, heuristic, injector (Phase 3)
 │   ├── hive/         # HiveMind query API (Phase 4 surface)
 │   └── security/     # PIN hashing/verification
 └── tests/            # queue, routing, adapters, hive, dashboard
@@ -100,7 +101,23 @@ python scripts/run_dispatcher.py
 
 # Terminal C — Mission Control:
 python scripts/run_dashboard.py    # → http://127.0.0.1:8787
+
+# Terminal D — Washing Machine (optional until you have traffic):
+python scripts/run_washer.py
 ```
+
+## Phase 3 — Washing Machine
+
+`memory/` ships a `Washer` ABC with a working `HeuristicWasher` (regex-based
+pinned/decaying extraction). Swap in a `GeminiWasher` by subclassing `Washer`
+and returning LLM-classified `MemoryDraft`s — nothing else changes.
+
+Injection: `MemoryInjector.build(agent_name)` concatenates
+pinned → insights → agent-scoped decaying → `OBSIDIAN_ROOT/<agent vault>/**.md`
+into a single .md blob to paste at the top of the agent's terminal session.
+
+Retention: `decay_days` is per-memory; `MemoryStore.prune_decayed()` runs on
+every washer pass. Pinned memories (`decay_days IS NULL`) survive forever.
 
 Collision prevention: exactly one message leaves the Waiting Room at a time, gated by an
 asyncio lock + SQLite `BEGIN IMMEDIATE` transaction in `floki/queue/dispatcher.py`.

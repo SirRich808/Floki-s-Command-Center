@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher
 from floki.agents import AgentRegistry
 from floki.config import settings
 from floki.hive import HiveMind
+from floki.memory import MemoryStore
 from floki.queue import QueueStore
 from floki.telegram.auth import ChatIdAllowlistMiddleware
 from floki.telegram.handlers import build_router
@@ -21,11 +22,13 @@ async def run_bot() -> None:
 
     registry = AgentRegistry()
     hive = HiveMind(cfg.queue_db_path)
+    memory = MemoryStore(cfg.queue_db_path)
+    await memory.init()
 
     bot = Bot(token=cfg.bot_token)
     dp = Dispatcher()
     dp.update.middleware(ChatIdAllowlistMiddleware())
-    dp.include_router(build_router(store, registry, hive))
+    dp.include_router(build_router(store, registry, hive, memory=memory))
 
     log.info(
         "telegram bot starting — allowed_chat_ids=%s agents=%s",

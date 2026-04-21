@@ -5,14 +5,15 @@ import asyncio
 import logging
 
 from floki.config import settings
+from floki.memory import MemoryStore
 from floki.queue import QueueStore
 
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = settings()
-    store = QueueStore(cfg.queue_db_path)
-    await store.init()
+    await QueueStore(cfg.queue_db_path).init()
+    await MemoryStore(cfg.queue_db_path).init()
     print(f"initialized: {cfg.queue_db_path}")
 
 

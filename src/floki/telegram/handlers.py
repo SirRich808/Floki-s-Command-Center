@@ -9,13 +9,19 @@ from aiogram.types import Message
 from floki.agents import AgentRegistry
 from floki.config import settings
 from floki.hive import HiveMind
+from floki.memory import MemoryCategory, MemoryStore
 from floki.queue import Envelope, QueueStore, Source
 from floki.telegram.auth import is_unlocked, lock, unlock
 
 log = logging.getLogger(__name__)
 
 
-def build_router(store: QueueStore, registry: AgentRegistry, hive: HiveMind) -> Router:
+def build_router(
+    store: QueueStore,
+    registry: AgentRegistry,
+    hive: HiveMind,
+    memory: MemoryStore | None = None,
+) -> Router:
     router = Router(name="floki-telegram")
 
     @router.message(Command("start"))
@@ -62,6 +68,31 @@ def build_router(store: QueueStore, registry: AgentRegistry, hive: HiveMind) -> 
             f"Waiting Room: {pending} pending\nHive Mind: {breakdown}",
             parse_mode=None,
         )
+
+    @router.message(Command("memory"))
+    async def on_memory(message: Message, command: CommandObject) -> None:
+        if not is_unlocked(message.chat.id):
+            await message.answer("Locked. `/pin <code>` first.", parse_mode=None)
+            return
+        if memory is None:
+            await message.answer("Memory store not wired.")
+            return
+        agent = (command.args or "floki").strip().lower()
+        if agent not in registry.names():
+            await message.answer(f"Unknown agent. Options: {', '.join(registry.names())}")
+            return
+        items = await memory.for_agent(agent)
+        if not items:
+            await message.answer(f"No memories for {agent}.")
+            return
+        pinned = [m for m in items if m.category == MemoryCategory.PINNED]
+        others = [m for m in items if m.category != MemoryCategory.PINNED]
+        lines = [f"Pinned ({len(pinned)}):"]
+        lines.extend(f"  • {m.content}" for m in pinned[:10])
+        if others:
+            lines.append(f"\nContext ({len(others)}):")
+            lines.extend(f"  • [{m.category.value}] {m.content[:80]}" for m in others[:10])
+        await message.answer("\n".join(lines), parse_mode=None)
 
     @router.message(Command("hive"))
     async def on_hive(message: Message, command: CommandObject) -> None:

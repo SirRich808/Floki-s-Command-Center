@@ -10,13 +10,14 @@ from floki.agents import AgentRegistry
 from floki.config import settings
 from floki.dashboard import create_app
 from floki.hive import HiveMind
+from floki.memory import MemoryStore
 from floki.queue import QueueStore
 
 
 async def _warm_store() -> None:
     cfg = settings()
-    store = QueueStore(cfg.queue_db_path)
-    await store.init()
+    await QueueStore(cfg.queue_db_path).init()
+    await MemoryStore(cfg.queue_db_path).init()
 
 
 def main() -> None:
@@ -32,7 +33,8 @@ def main() -> None:
     store = QueueStore(cfg.queue_db_path)
     registry = AgentRegistry()
     hive = HiveMind(cfg.queue_db_path)
-    app = create_app(store, registry, hive)
+    memory = MemoryStore(cfg.queue_db_path)
+    app = create_app(store, registry, hive, memory=memory)
 
     uvicorn.run(
         app,

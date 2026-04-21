@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     pipecat_ws_secret: str = Field(default="", alias="PIPECAT_WS_SECRET")
     daily_room_url: str = Field(default="", alias="DAILY_ROOM_URL")
 
+    obsidian_root: Path | None = Field(default=None, alias="OBSIDIAN_ROOT")
+    washer_interval: int = Field(default=60, alias="WASHER_INTERVAL")  # seconds
+
     @field_validator("allowed_chat_ids", mode="before")
     @classmethod
     def _split_ids(cls, v: object) -> list[int]:
@@ -45,6 +48,13 @@ class Settings(BaseSettings):
     def _resolve_path(cls, v: object) -> Path:
         p = Path(str(v))
         return p if p.is_absolute() else ROOT / p
+
+    @field_validator("obsidian_root", mode="before")
+    @classmethod
+    def _optional_path(cls, v: object) -> Path | None:
+        if v in (None, "", b""):
+            return None
+        return Path(str(v)).expanduser()
 
 
 @lru_cache

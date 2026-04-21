@@ -20,6 +20,7 @@ from floki.dashboard.auth import (
 )
 from floki.dashboard.templates import LOGIN_HTML, dashboard_html
 from floki.hive import HiveMind
+from floki.memory import MemoryStore
 from floki.queue import Envelope, QueueStore, Source
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def create_app(
     store: QueueStore,
     registry: AgentRegistry,
     hive: HiveMind,
+    memory: MemoryStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Floki Command Center", version="0.1.0")
 
@@ -102,6 +104,28 @@ def create_app(
                 }
                 for e in events
             ]
+        }
+
+    @app.get("/api/memory", dependencies=[Depends(require_session)])
+    async def api_memory(agent: str = "floki", limit: int = 50) -> dict:
+        if memory is None:
+            return {"counts": {}, "items": []}
+        if agent not in registry.names():
+            raise HTTPException(404, f"unknown agent '{agent}'")
+        items = await memory.for_agent(agent)
+        counts = await memory.counts_by_category()
+        return {
+            "counts": counts,
+            "items": [
+                {
+                    "id": m.id,
+                    "category": m.category.value,
+                    "scope_agent": m.scope_agent,
+                    "content": m.content,
+                    "created_at": m.created_at,
+                }
+                for m in items[:limit]
+            ],
         }
 
     @app.post("/api/tasks", dependencies=[Depends(require_session)])
