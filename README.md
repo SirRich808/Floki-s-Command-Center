@@ -15,33 +15,66 @@ A modular multi-agent terminal ecosystem for OpenClaw, running on Mac Studio M3 
 
 ```
 floki-command-center/
-├── config/           # agents.yaml, security.yaml (gitignored secrets live in .env)
+├── config/           # agents.yaml (Elephant-Agent registry)
 ├── data/             # queue.db (gitignored)
-├── scripts/          # init_db, run_telegram, future run_dispatcher
+├── launchd/          # .plist templates + install.sh (Phase 6)
+├── scripts/          # init_db · run_telegram · run_dispatcher
 ├── src/floki/
 │   ├── config.py
 │   ├── queue/        # Waiting Room: schema, store, dispatcher
-│   ├── telegram/     # aiogram bot, allowlist middleware, PIN gate, handlers
-│   ├── agents/       # Sub-agent registry (modular — drop in new frameworks)
+│   ├── telegram/     # aiogram bot, allowlist middleware, PIN gate, /hive, /status
+│   ├── agents/       # Sub-agent registry + AgentAdapter (Tmux / Stub)
+│   ├── hive/         # HiveMind query API (Phase 4 surface)
 │   └── security/     # PIN hashing/verification
-└── tests/
+└── tests/            # queue, routing, adapters, hive
 ```
 
-## Phase 2 quickstart
+## Phase 1 — agent adapters (Elephant-Agent protocol)
+
+Every sub-agent runs in its own tmux session (`floki-comms`, `floki-ops`, …).
+`TmuxAdapter` pastes envelope payloads via `load-buffer`/`paste-buffer` so
+multi-line content doesn't need shell escaping. Grafting a new OSS framework =
+subclass `AgentAdapter.deliver`; nothing in the dispatcher changes.
+
+Dry-run without tmux: `FLOKI_ADAPTER=stub python scripts/run_dispatcher.py`.
+
+## Phase 6 — autostart
+
+```bash
+./launchd/install.sh /path/to/.venv/bin/python
+```
+
+Installs `com.floki.telegram` and `com.floki.dispatcher` as LaunchAgents. The
+dispatcher plist is a *singleton* on purpose — duplicating it breaks collision
+prevention.
+
+## Quickstart
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
-cp .env.example .env      # fill in BOT_TOKEN, ALLOWED_CHAT_IDS, PIN, TUNNEL_URL
+cp .env.example .env      # fill in BOT_TOKEN, ALLOWED_CHAT_IDS, PIN_HASH, TUNNEL_URL
+python -m floki.security.pin hash 1234   # paste output as PIN_HASH
 python scripts/init_db.py
+
+# Terminal A:
 python scripts/run_telegram.py
-```
 
-In another terminal (this becomes the single-consumer dispatcher in Phase 2b):
-
-```bash
+# Terminal B (start tmux sessions floki-comms/content/ops/research first, or use FLOKI_ADAPTER=stub):
 python scripts/run_dispatcher.py
 ```
 
 Collision prevention: exactly one message leaves the Waiting Room at a time, gated by an
 asyncio lock + SQLite `BEGIN IMMEDIATE` transaction in `floki/queue/dispatcher.py`.
+
+## Telegram commands
+
+| Command          | Unlocked? | What it does |
+|------------------|-----------|--------------|
+| `/start`         | no        | Greeting + PIN prompt |
+| `/pin <code>`    | no        | Unlocks War Room for 30 min |
+| `/lock`          | yes       | Clear PIN session |
+| `/dashboard`     | yes       | Returns Cloudflare Tunnel URL |
+| `/status`        | yes       | Pending queue + Hive Mind counts |
+| `/hive [agent]`  | yes       | Recent 10 events, optionally filtered |
+| *(free text)*    | yes       | Routed: broadcast keyword → prefix → default (floki) |

@@ -8,13 +8,14 @@ from aiogram.types import Message
 
 from floki.agents import AgentRegistry
 from floki.config import settings
+from floki.hive import HiveMind
 from floki.queue import Envelope, QueueStore, Source
 from floki.telegram.auth import is_unlocked, lock, unlock
 
 log = logging.getLogger(__name__)
 
 
-def build_router(store: QueueStore, registry: AgentRegistry) -> Router:
+def build_router(store: QueueStore, registry: AgentRegistry, hive: HiveMind) -> Router:
     router = Router(name="floki-telegram")
 
     @router.message(Command("start"))
@@ -55,11 +56,28 @@ def build_router(store: QueueStore, registry: AgentRegistry) -> Router:
             await message.answer("Locked. `/pin <code>` first.", parse_mode=None)
             return
         pending = await store.pending_count()
-        agents = ", ".join(registry.names())
+        counts = await hive.counts_by_agent()
+        breakdown = ", ".join(f"{a}={n}" for a, n in sorted(counts.items())) or "(no activity)"
         await message.answer(
-            f"Waiting Room: {pending} pending\nAgents: {agents}",
+            f"Waiting Room: {pending} pending\nHive Mind: {breakdown}",
             parse_mode=None,
         )
+
+    @router.message(Command("hive"))
+    async def on_hive(message: Message, command: CommandObject) -> None:
+        if not is_unlocked(message.chat.id):
+            await message.answer("Locked. `/pin <code>` first.", parse_mode=None)
+            return
+        agent = (command.args or "").strip().lower() or None
+        if agent and agent not in registry.names():
+            await message.answer(f"Unknown agent. Options: {', '.join(registry.names())}")
+            return
+        events = await hive.recent(agent=agent, limit=10)
+        if not events:
+            await message.answer("Hive Mind: nothing recent.")
+            return
+        lines = [f"#{e.envelope_id or '-'} [{e.agent}] {e.event_type} — {e.created_at}" for e in events]
+        await message.answer("\n".join(lines), parse_mode=None)
 
     @router.message()
     async def on_message(message: Message) -> None:

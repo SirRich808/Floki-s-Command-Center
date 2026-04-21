@@ -1,27 +1,30 @@
 """Run the single-consumer dispatcher.
 
-In Phase 2 this stubs each agent as a log-print handler. Phase 1 wires real
-terminal sessions (tmux / iTerm pipes) in as AgentHandlers.
+Uses TmuxAdapter per agents.yaml by default. Override via FLOKI_ADAPTER=stub
+for dry-runs without tmux installed.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
-from floki.agents import AgentRegistry
+from floki.agents import AdapterRegistry, AgentRegistry, StubAdapter
 from floki.config import settings
 from floki.queue import QueueStore
 from floki.queue.dispatcher import Dispatcher
-from floki.queue.models import Envelope
 
 log = logging.getLogger(__name__)
 
 
-def _stub_handler(agent_name: str):
-    async def handle(env: Envelope) -> None:
-        log.info("[%s] received #%s (%s): %s", agent_name, env.id, env.routing_reason, env.payload)
-        await asyncio.sleep(0)
-    return handle
+def build_adapters(agents: AgentRegistry) -> AdapterRegistry:
+    mode = os.getenv("FLOKI_ADAPTER", "tmux").lower()
+    if mode == "stub":
+        reg = AdapterRegistry(agents)
+        for name in agents.names():
+            reg.set(name, StubAdapter(name))
+        return reg
+    return AdapterRegistry.tmux_from_registry(agents)
 
 
 async def main() -> None:
@@ -33,15 +36,19 @@ async def main() -> None:
     store = QueueStore(cfg.queue_db_path)
     await store.init()
 
-    registry = AgentRegistry()
+    agents = AgentRegistry()
+    adapters = build_adapters(agents)
+
     dispatcher = Dispatcher(
         store,
         poll_interval=cfg.dispatch_poll_interval,
         max_retries=cfg.dispatch_max_retries,
     )
-    for name in registry.names():
-        dispatcher.register(name, _stub_handler(name))
+    for name in agents.names():
+        adapter = adapters.get(name)
+        dispatcher.register(name, adapter.deliver)
 
+    log.info("dispatcher ready (mode=%s, agents=%s)", os.getenv("FLOKI_ADAPTER", "tmux"), agents.names())
     await dispatcher.run()
 
 

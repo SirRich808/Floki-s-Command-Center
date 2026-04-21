@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Telegram bot daemon.
+  Install:
+    cp launchd/com.floki.telegram.plist ~/Library/LaunchAgents/
+    launchctl load   ~/Library/LaunchAgents/com.floki.telegram.plist
+    launchctl unload ~/Library/LaunchAgents/com.floki.telegram.plist  # to stop
+
+  Edit __PROJECT_PATH__ and __PYTHON__ for your machine before loading.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.floki.telegram</string>
+
+  <key>WorkingDirectory</key>
+  <string>__PROJECT_PATH__</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>scripts/run_telegram.py</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>__PROJECT_PATH__/src</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>__PROJECT_PATH__/logs/telegram.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__PROJECT_PATH__/logs/telegram.err.log</string>
+</dict>
+</plist>
