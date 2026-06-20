@@ -80,7 +80,8 @@ async def test_dispatcher_requeues_on_failure_until_max_retries(store: QueueStor
         raise RuntimeError("boom")
 
     await store.enqueue(Envelope(source=Source.TELEGRAM, target_agent="ops", payload="x"))
-    dispatcher = Dispatcher(store, poll_interval=0.01, max_retries=2)
+    # backoff_base=0 disables retry delay (backoff is covered by test_backoff_and_failed.py)
+    dispatcher = Dispatcher(store, poll_interval=0.01, max_retries=2, backoff_base=0)
     dispatcher.register("ops", flaky)
 
     task = asyncio.create_task(dispatcher.run())

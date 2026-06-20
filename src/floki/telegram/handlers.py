@@ -94,6 +94,48 @@ def build_router(
             lines.extend(f"  • [{m.category.value}] {m.content[:80]}" for m in others[:10])
         await message.answer("\n".join(lines), parse_mode=None)
 
+    @router.message(Command("failed"))
+    async def on_failed(message: Message, command: CommandObject) -> None:
+        if not is_unlocked(message.chat.id):
+            await message.answer("Locked. `/pin <code>` first.", parse_mode=None)
+            return
+        envs = await store.list_failed(limit=10)
+        if not envs:
+            await message.answer("No failed envelopes.")
+            return
+        lines = []
+        for e in envs:
+            lines.append(
+                f"#{e.id} [{e.target_agent}] x{e.attempts} — {(e.last_error or '')[:60]}\n"
+                f"  {e.payload[:80]}"
+            )
+        lines.append("\nRequeue: /requeue <id>   Drop: /drop <id>")
+        await message.answer("\n".join(lines), parse_mode=None)
+
+    @router.message(Command("requeue"))
+    async def on_requeue(message: Message, command: CommandObject) -> None:
+        if not is_unlocked(message.chat.id):
+            await message.answer("Locked. `/pin <code>` first.", parse_mode=None)
+            return
+        arg = (command.args or "").strip()
+        if not arg.isdigit():
+            await message.answer("Usage: /requeue <envelope_id>")
+            return
+        ok = await store.requeue_failed(int(arg))
+        await message.answer(f"#{arg} requeued" if ok else f"#{arg} not found or not failed")
+
+    @router.message(Command("drop"))
+    async def on_drop(message: Message, command: CommandObject) -> None:
+        if not is_unlocked(message.chat.id):
+            await message.answer("Locked. `/pin <code>` first.", parse_mode=None)
+            return
+        arg = (command.args or "").strip()
+        if not arg.isdigit():
+            await message.answer("Usage: /drop <envelope_id>")
+            return
+        ok = await store.drop_envelope(int(arg))
+        await message.answer(f"#{arg} dropped" if ok else f"#{arg} not found")
+
     @router.message(Command("hive"))
     async def on_hive(message: Message, command: CommandObject) -> None:
         if not is_unlocked(message.chat.id):

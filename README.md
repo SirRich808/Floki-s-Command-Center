@@ -154,4 +154,24 @@ asyncio lock + SQLite `BEGIN IMMEDIATE` transaction in `floki/queue/dispatcher.p
 | `/dashboard`     | yes       | Returns Cloudflare Tunnel URL |
 | `/status`        | yes       | Pending queue + Hive Mind counts |
 | `/hive [agent]`  | yes       | Recent 10 events, optionally filtered |
+| `/memory [agent]`| yes       | Pinned + recent context for an agent |
+| `/failed`        | yes       | List dead-letter envelopes |
+| `/requeue <id>`  | yes       | Reset a failed envelope back to queued |
+| `/drop <id>`     | yes       | Delete an envelope entirely |
 | *(free text)*    | yes       | Routed: broadcast keyword → prefix → default (floki) |
+
+## Operational tools
+
+```bash
+floki doctor                 # one-shot setup healthcheck
+floki failed                 # list failed envelopes
+floki requeue <envelope_id>  # reset failed → queued (resets attempts)
+floki drop <envelope_id>     # delete an envelope
+floki queue                  # pending + failed + per-agent hive counts
+```
+
+Retry behavior: failed envelopes are requeued with exponential backoff
+(`base * 2^(attempts-1)`, capped). Defaults: base=2s, cap=60s, max_retries=3.
+After max retries the envelope lands in `failed` and shows up on the dashboard
++ via `floki failed` + `/failed` Telegram command. The dispatcher handles
+SIGTERM/SIGINT so `launchctl unload` drains cleanly.

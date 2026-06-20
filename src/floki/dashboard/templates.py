@@ -83,6 +83,14 @@ def dashboard_html(daily_url: str) -> str:
       <tbody id="hive"></tbody>
     </table>
   </div>
+
+  <div class="panel" style="grid-column:1/-1">
+    <h2>Failed Envelopes</h2>
+    <table>
+      <thead><tr><th>#</th><th>Agent</th><th>Payload</th><th>Attempts</th><th>Error</th><th></th></tr></thead>
+      <tbody id="failed"></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -102,6 +110,20 @@ async function refresh() {{
     `<tr><td>${{e.envelope_id ?? '-'}}</td><td>${{e.agent}}</td><td>${{e.event_type}}</td>`
     + `<td class="muted">${{e.detail ?? ''}}</td><td class="muted">${{e.created_at}}</td></tr>`
   ).join('') || '<tr><td colspan=5 class="muted">no activity</td></tr>';
+
+  const f = await (await fetch('/api/failed?limit=20')).json();
+  document.getElementById('failed').innerHTML = f.envelopes.map(e =>
+    `<tr><td>#${{e.id}}</td><td>${{e.target_agent}}</td>`
+    + `<td>${{(e.payload || '').slice(0,80)}}</td>`
+    + `<td>${{e.attempts}}</td>`
+    + `<td class="muted">${{(e.last_error || '').slice(0,60)}}</td>`
+    + `<td><button onclick="act(${{e.id}},'requeue')">requeue</button>`
+    + ` <button onclick="act(${{e.id}},'drop')">drop</button></td></tr>`
+  ).join('') || '<tr><td colspan=6 class="muted">no failed envelopes</td></tr>';
+}}
+async function act(id, what) {{
+  await fetch(`/api/failed/${{id}}/${{what}}`, {{method:'POST'}});
+  refresh();
 }}
 document.getElementById('task-form').addEventListener('submit', async (ev) => {{
   ev.preventDefault();

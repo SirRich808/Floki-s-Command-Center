@@ -82,13 +82,63 @@ async def _cmd_queue(args: argparse.Namespace) -> int:
     hive = HiveMind(settings().queue_db_path)
     pending = await store.pending_count()
     counts = await hive.counts_by_agent()
+    failed = await store.list_failed(limit=1000)
     if args.json:
-        print(json.dumps({"pending": pending, "hive_counts": counts}, indent=2))
+        print(json.dumps(
+            {"pending": pending, "failed": len(failed), "hive_counts": counts},
+            indent=2,
+        ))
     else:
         print(f"pending: {pending}")
+        print(f"failed:  {len(failed)}")
         for agent, n in sorted(counts.items()):
             print(f"  {agent}: {n}")
     return 0
+
+
+async def _cmd_failed(args: argparse.Namespace) -> int:
+    store = QueueStore(settings().queue_db_path)
+    envs = await store.list_failed(limit=args.limit)
+    if args.json:
+        print(json.dumps(
+            [{"id": e.id, "target_agent": e.target_agent, "payload": e.payload,
+              "attempts": e.attempts, "last_error": e.last_error,
+              "created_at": e.created_at} for e in envs],
+            indent=2,
+        ))
+        return 0
+    if not envs:
+        print("(no failed envelopes)")
+        return 0
+    for e in envs:
+        print(f"#{e.id}  [{e.target_agent}] attempts={e.attempts}  err={e.last_error or ''}")
+        print(f"    {e.payload[:120]}")
+    return 0
+
+
+async def _cmd_requeue(args: argparse.Namespace) -> int:
+    store = QueueStore(settings().queue_db_path)
+    ok = await store.requeue_failed(args.envelope_id)
+    if not ok:
+        print(f"#{args.envelope_id}: not found or not in failed state", file=sys.stderr)
+        return 2
+    print(f"#{args.envelope_id} requeued")
+    return 0
+
+
+async def _cmd_drop(args: argparse.Namespace) -> int:
+    store = QueueStore(settings().queue_db_path)
+    ok = await store.drop_envelope(args.envelope_id)
+    if not ok:
+        print(f"#{args.envelope_id}: not found", file=sys.stderr)
+        return 2
+    print(f"#{args.envelope_id} dropped")
+    return 0
+
+
+async def _cmd_doctor(args: argparse.Namespace) -> int:
+    from floki.doctor import run as run_doctor
+    return await run_doctor()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -115,6 +165,22 @@ def _parser() -> argparse.ArgumentParser:
     q = sub.add_parser("queue", help="queue + hive summary")
     q.add_argument("--json", action="store_true")
     q.set_defaults(func=_cmd_queue)
+
+    f = sub.add_parser("failed", help="list failed envelopes")
+    f.add_argument("--limit", type=int, default=50)
+    f.add_argument("--json", action="store_true")
+    f.set_defaults(func=_cmd_failed)
+
+    rq = sub.add_parser("requeue", help="reset a failed envelope back to queued")
+    rq.add_argument("envelope_id", type=int)
+    rq.set_defaults(func=_cmd_requeue)
+
+    dr = sub.add_parser("drop", help="delete an envelope")
+    dr.add_argument("envelope_id", type=int)
+    dr.set_defaults(func=_cmd_drop)
+
+    d = sub.add_parser("doctor", help="run setup healthcheck")
+    d.set_defaults(func=_cmd_doctor)
 
     return p
 

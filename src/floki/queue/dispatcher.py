@@ -21,6 +21,11 @@ class Dispatcher:
         regardless of how many inputs (Telegram, cron, voice) fire simultaneously.
       * `QueueStore.claim_next` uses BEGIN IMMEDIATE so a second dispatcher would
         still never double-claim.
+
+    Backoff:
+      Failed-but-retryable envelopes are scheduled with exponential backoff
+      (base * 2^(attempts-1), capped at backoff_max). Set base=0 to disable
+      (useful in tests).
     """
 
     def __init__(
@@ -28,10 +33,14 @@ class Dispatcher:
         store: QueueStore,
         poll_interval: float = 0.25,
         max_retries: int = 3,
+        backoff_base: float = 2.0,
+        backoff_max: float = 60.0,
     ):
         self.store = store
         self.poll_interval = poll_interval
         self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self.backoff_max = backoff_max
         self._handlers: dict[str, AgentHandler] = {}
         self._global_lock = asyncio.Lock()
         self._stopped = asyncio.Event()
@@ -40,7 +49,7 @@ class Dispatcher:
         self._handlers[agent_name] = handler
 
     async def run(self) -> None:
-        log.info("dispatcher starting (poll=%.2fs)", self.poll_interval)
+        log.info("dispatcher starting (poll=%.2fs, max_retries=%d)", self.poll_interval, self.max_retries)
         while not self._stopped.is_set():
             env = await self.store.claim_next()
             if env is None:
@@ -52,6 +61,7 @@ class Dispatcher:
 
             async with self._global_lock:
                 await self._deliver(env)
+        log.info("dispatcher stopped")
 
     async def _deliver(self, env: Envelope) -> None:
         handler = self._handlers.get(env.target_agent)
@@ -64,14 +74,25 @@ class Dispatcher:
         try:
             await handler(env)
         except Exception as e:  # noqa: BLE001 - dispatcher is the safety net
-            # env.attempts was incremented to 1 on first claim, so retries_used = attempts - 1.
-            requeue = (env.attempts - 1) < self.max_retries
-            log.exception("delivery failed for envelope %s (requeue=%s)", env.id, requeue)
-            await self.store.mark_failed(env.id or 0, str(e), requeue=requeue)
+            retries_used = env.attempts - 1
+            requeue = retries_used < self.max_retries
+            delay = self._backoff_for(env.attempts) if requeue else None
+            log.exception(
+                "delivery failed for envelope %s (requeue=%s, delay=%ss)",
+                env.id, requeue, delay,
+            )
+            await self.store.mark_failed(
+                env.id or 0, str(e), requeue=requeue, retry_after_seconds=delay,
+            )
             return
 
         await self.store.mark_delivered(env.id or 0)
         log.info("delivered envelope %s -> %s", env.id, env.target_agent)
+
+    def _backoff_for(self, attempts: int) -> float:
+        if self.backoff_base <= 0:
+            return 0.0
+        return min(self.backoff_base * (2 ** max(0, attempts - 1)), self.backoff_max)
 
     def stop(self) -> None:
         self._stopped.set()

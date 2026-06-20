@@ -16,10 +16,14 @@ CREATE TABLE IF NOT EXISTS envelopes (
     status          TEXT    NOT NULL DEFAULT 'queued', -- queued | pushing | delivered | failed
     attempts        INTEGER NOT NULL DEFAULT 0,
     last_error      TEXT,
+    retry_after     TEXT,                        -- earliest claim time (ISO8601), NULL = ready now
     created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     claimed_at      TEXT,
     delivered_at    TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_envelopes_ready
+    ON envelopes (status, retry_after, priority, id);
 
 CREATE INDEX IF NOT EXISTS idx_envelopes_status_priority
     ON envelopes (status, priority, id);

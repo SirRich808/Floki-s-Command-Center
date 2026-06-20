@@ -128,6 +128,39 @@ def create_app(
             ],
         }
 
+    @app.get("/api/failed", dependencies=[Depends(require_session)])
+    async def api_failed(limit: int = 50) -> dict:
+        limit = max(1, min(limit, 200))
+        envs = await store.list_failed(limit=limit)
+        return {
+            "envelopes": [
+                {
+                    "id": e.id,
+                    "target_agent": e.target_agent,
+                    "payload": e.payload,
+                    "attempts": e.attempts,
+                    "last_error": e.last_error,
+                    "created_at": e.created_at,
+                    "claimed_at": e.claimed_at,
+                }
+                for e in envs
+            ]
+        }
+
+    @app.post("/api/failed/{envelope_id}/requeue", dependencies=[Depends(require_session)])
+    async def api_requeue(envelope_id: int) -> dict:
+        ok = await store.requeue_failed(envelope_id)
+        if not ok:
+            raise HTTPException(404, "envelope not found or not failed")
+        return {"envelope_id": envelope_id, "status": "queued"}
+
+    @app.post("/api/failed/{envelope_id}/drop", dependencies=[Depends(require_session)])
+    async def api_drop(envelope_id: int) -> dict:
+        ok = await store.drop_envelope(envelope_id)
+        if not ok:
+            raise HTTPException(404, "envelope not found")
+        return {"envelope_id": envelope_id, "status": "dropped"}
+
     @app.post("/api/tasks", dependencies=[Depends(require_session)])
     async def api_create_task(task: TaskIn) -> dict:
         """Task auto-assigner (Phase 4 dashboard surface).

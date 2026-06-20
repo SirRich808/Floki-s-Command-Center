@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 import yaml
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,7 +19,11 @@ class Settings(BaseSettings):
     )
 
     bot_token: str = Field(alias="BOT_TOKEN")
-    allowed_chat_ids: list[int] = Field(default_factory=list, alias="ALLOWED_CHAT_IDS")
+    # NoDecode: skip pydantic-settings' default JSON parsing so "1,2,3" works
+    # instead of requiring "[1,2,3]". The field_validator below splits on comma.
+    allowed_chat_ids: Annotated[list[int], NoDecode] = Field(
+        default_factory=list, alias="ALLOWED_CHAT_IDS"
+    )
     dashboard_tunnel_url: str = Field(default="", alias="DASHBOARD_TUNNEL_URL")
     pin_hash: str = Field(default="", alias="PIN_HASH")
 

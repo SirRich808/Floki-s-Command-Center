@@ -122,3 +122,30 @@ async def test_pipecat_ws_rejects_bad_key(wired) -> None:
     with pytest.raises(Exception):
         with client.websocket_connect("/ws/pipecat?key=nope"):
             pass
+
+
+async def test_failed_envelope_endpoints(wired) -> None:
+    store, _, _, client = wired
+    _auth(client)
+
+    from floki.queue import Envelope, Source
+    await store.enqueue(Envelope(source=Source.TELEGRAM, target_agent="ops", payload="dead-letter"))
+    env = await store.claim_next()
+    await store.mark_failed(env.id, "synthetic", requeue=False)
+
+    r = client.get("/api/failed")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["envelopes"]) == 1
+    assert body["envelopes"][0]["last_error"] == "synthetic"
+
+    r = client.post(f"/api/failed/{env.id}/requeue")
+    assert r.status_code == 200
+    assert await store.pending_count() == 1
+
+    r = client.post(f"/api/failed/{env.id}/drop")
+    assert r.status_code == 200
+    assert await store.pending_count() == 0
+
+    assert client.post("/api/failed/9999/requeue").status_code == 404
+    assert client.post("/api/failed/9999/drop").status_code == 404

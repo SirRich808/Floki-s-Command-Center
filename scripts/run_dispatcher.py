@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
 
 from floki.agents import AdapterRegistry, AgentRegistry, StubAdapter
 from floki.config import settings
@@ -47,6 +48,14 @@ async def main() -> None:
     for name in agents.names():
         adapter = adapters.get(name)
         dispatcher.register(name, adapter.deliver)
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, dispatcher.stop)
+        except NotImplementedError:
+            # Windows or restricted environment — fall through to KeyboardInterrupt.
+            pass
 
     log.info("dispatcher ready (mode=%s, agents=%s)", os.getenv("FLOKI_ADAPTER", "tmux"), agents.names())
     await dispatcher.run()
